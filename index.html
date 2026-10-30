@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MasterChat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-white h-screen flex flex-col">
+
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen" class="flex items-center justify-center h-screen">
+        <div class="bg-slate-800 p-8 rounded-xl shadow-lg w-96">
+            <h2 class="text-2xl font-bold mb-6 text-center text-indigo-400">MasterChat Login</h2>
+            <input type="text" id="username" placeholder="Username" class="w-full p-3 mb-4 bg-slate-700 rounded border border-slate-600 focus:outline-none focus:border-indigo-500">
+            <input type="password" id="password" placeholder="Password" class="w-full p-3 mb-4 bg-slate-700 rounded border border-slate-600 focus:outline-none focus:border-indigo-500">
+            <button onclick="fazerLogin()" class="w-full bg-indigo-600 hover:bg-indigo-700 p-3 rounded font-bold transition">Sign In</button>
+            <p id="login-error" class="text-red-400 text-sm mt-3 text-center hidden">Invalid username or password.</p>
+        </div>
+    </div>
+
+    <!-- CHAT SCREEN (Hidden initially) -->
+    <div id="chat-screen" class="hidden flex flex-col h-screen">
+        <!-- Header -->
+        <header class="bg-slate-800 p-4 border-b border-slate-700 flex justify-between items-center">
+            <div>
+                <h1 class="font-bold text-lg">MasterChat Workspace</h1>
+                <p class="text-xs text-slate-400">Logged in as: <span id="current-user" class="text-indigo-400 font-semibold"></span></p>
+            </div>
+            <div class="flex gap-2">
+                <button id="btn-admin" onclick="abrirAdminModal()" class="hidden bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 rounded text-sm transition">Manage Accounts</button>
+                <button onclick="sair()" class="bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded text-sm transition">Logout</button>
+            </div>
+        </header>
+
+        <!-- Messages -->
+        <div id="chat-messages" class="flex-1 p-4 overflow-y-auto space-y-4">
+            <!-- Messages appear here -->
+        </div>
+
+        <!-- Input Area -->
+        <div class="bg-slate-800 p-4 border-t border-slate-700 flex gap-2 items-center">
+            <input type="file" id="file-input" class="hidden" onchange="enviarArquivo(event)">
+            <button onclick="document.getElementById('file-input').click()" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded text-sm">📎 Attach</button>
+            <input type="text" id="message-input" placeholder="Type your message..." class="flex-1 p-2 bg-slate-700 rounded border border-slate-600 focus:outline-none focus:border-indigo-500" onkeypress="if(event.key === 'Enter') enviarMensagem()">
+            <button onclick="enviarMensagem()" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded font-bold">Send</button>
+        </div>
+    </div>
+
+    <!-- ADMIN MODAL -->
+    <div id="admin-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center">
+        <div class="bg-slate-800 p-6 rounded-xl w-[400px] border border-slate-700">
+            <h3 class="text-xl font-bold mb-4 text-emerald-400">Manage Access Accounts</h3>
+            <div class="space-y-3 mb-4">
+                <input type="text" id="new-user" placeholder="New Username" class="w-full p-2 bg-slate-700 rounded border border-slate-600">
+                <input type="password" id="new-pass" placeholder="Password" class="w-full p-2 bg-slate-700 rounded border border-slate-600">
+                <button onclick="criarUsuario()" class="w-full bg-emerald-600 hover:bg-emerald-700 p-2 rounded font-bold">Add New User</button>
+            </div>
+            <h4 class="font-semibold text-sm text-slate-400 mb-2">Registered Users:</h4>
+            <div id="users-list" class="max-h-32 overflow-y-auto space-y-1 mb-4 text-sm bg-slate-900 p-2 rounded">
+                <!-- User list -->
+            </div>
+            <button onclick="fecharAdminModal()" class="w-full bg-slate-700 hover:bg-slate-600 p-2 rounded">Close</button>
+        </div>
+    </div>
+
+    <script>
+        // Initialize default accounts if they don't exist
+        if (!localStorage.getItem('usuarios')) {
+            localStorage.setItem('usuarios', JSON.stringify([
+                { user: 'rafael virgens', pass: 'admin123', isAdmin: true },
+                { user: 'guest', pass: '123456', isAdmin: false }
+            ]));
+        }
+
+        if (!localStorage.getItem('mensagens')) {
+            localStorage.setItem('mensagens', JSON.stringify([]));
+        }
+
+        let usuarioLogado = null;
+
+        function fazerLogin() {
+            let u = document.getElementById('username').value.trim().toLowerCase();
+            let p = document.getElementById('password').value;
+            let usuarios = JSON.parse(localStorage.getItem('usuarios'));
+
+            let encontrado = usuarios.find(x => x.user.toLowerCase() === u && x.pass === p);
+            if (encontrado) {
+                usuarioLogado = encontrado;
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('chat-screen').classList.remove('hidden');
+                document.getElementById('current-user').innerText = encontrado.user;
+                
+                if (encontrado.isAdmin) {
+                    document.getElementById('btn-admin').classList.remove('hidden');
+                }
+                carregarMensagens();
+            } else {
+                document.getElementById('login-error').classList.remove('hidden');
+            }
+        }
+
+        function sair() {
+            usuarioLogado = null;
+            document.getElementById('chat-screen').classList.add('hidden');
+            document.getElementById('login-screen').classList.remove('hidden');
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+            document.getElementById('btn-admin').classList.add('hidden');
+        }
+
+        function enviarMensagem() {
+            let texto = document.getElementById('message-input').value.trim();
+            if (!texto) return;
+
+            salvarMensagem({ autor: usuarioLogado.user, tipo: 'texto', conteudo: texto, data: new Date().toLocaleTimeString() });
+            document.getElementById('message-input').value = '';
+            carregarMensagens();
+        }
+
+        function enviarArquivo(event) {
+            let file = event.target.files[0];
+            if (!file) return;
+
+            let reader = new FileReader();
+            reader.onload = function(e) {
+                salvarMensagem({ 
+                    autor: usuarioLogado.user, 
+                    tipo: file.type.startsWith('image/') ? 'imagem' : 'arquivo', 
+                    conteudo: e.target.result, 
+                    nomeArquivo: file.name,
+                    data: new Date().toLocaleTimeString() 
+                });
+                carregarMensagens();
+            }
+            reader.readAsDataURL(file);
+        }
+
+        function salvarMensagem(msg) {
+            let msgs = JSON.parse(localStorage.getItem('mensagens'));
+            msgs.push(msg);
+            localStorage.setItem('mensagens', JSON.stringify(msgs));
+        }
+
+        function carregarMensagens() {
+            let msgs = JSON.parse(localStorage.getItem('mensagens'));
+            let container = document.getElementById('chat-messages');
+            container.innerHTML = '';
+
+            msgs.forEach(m => {
+                let div = document.createElement('div');
+                div.className = `p-3 rounded-lg max-w-md ${m.autor === usuarioLogado.user ? 'bg-indigo-600 ml-auto' : 'bg-slate-700 mr-auto'}`;
+                
+                let conteudoHTML = `<p class="text-xs text-indigo-200 font-bold mb-1">${m.autor}</p>`;
+                if (m.tipo === 'texto') {
+                    conteudoHTML += `<p>${m.conteudo}</p>`;
+                } else if (m.tipo === 'imagem') {
+                    conteudoHTML += `<img src="${m.conteudo}" class="rounded max-h-48 mt-1">`;
+                } else {
+                    conteudoHTML += `<a href="${m.conteudo}" download="${m.nomeArquivo}" class="underline text-blue-300">download file: ${m.nomeArquivo}</a>`;
+                }
+                conteudoHTML += `<span class="text-[10px] text-slate-300 block text-right mt-1">${m.data}</span>`;
+                
+                div.innerHTML = conteudoHTML;
+                container.appendChild(div);
+            });
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Admin Functions
+        function abrirAdminModal() {
+            document.getElementById('admin-modal').classList.remove('hidden');
+            atualizarListaUsuarios();
+        }
+
+        function fecharAdminModal() {
+            document.getElementById('admin-modal').classList.add('hidden');
+        }
+
+        function criarUsuario() {
+            let u = document.getElementById('new-user').value.trim();
+            let p = document.getElementById('new-pass').value;
+            if (!u || !p) return alert('Please fill in username and password!');
+
+            let usuarios = JSON.parse(localStorage.getItem('usuarios'));
+            if (usuarios.some(x => x.user.toLowerCase() === u.toLowerCase())) {
+                alert('User already exists!');
+                return;
+            }
+
+            usuarios.push({ user: u, pass: p, isAdmin: false });
+            localStorage.setItem('usuarios', JSON.stringify(usuarios));
+            
+            document.getElementById('new-user').value = '';
+            document.getElementById('new-pass').value = '';
+            atualizarListaUsuarios();
+            alert('User created successfully!');
+        }
+
+        function atualizarListaUsuarios() {
+            let usuarios = JSON.parse(localStorage.getItem('usuarios'));
+            let lista = document.getElementById('users-list');
+            lista.innerHTML = '';
+            usuarios.forEach(x => {
+                let div = document.createElement('div');
+                div.className = 'flex justify-between items-center bg-slate-800 p-1.5 rounded';
+                div.innerHTML = `<span>${x.user} ${x.isAdmin ? '(Admin)' : ''}</span>`;
+                if (!x.isAdmin) {
+                    div.innerHTML += `<button onclick="removerUsuario('${x.user}')" class="text-red-400 hover:text-red-300 text-xs">Remove</button>`;
+                }
+                lista.appendChild(div);
+            });
+        }
+
+        function removerUsuario(nome) {
+            let usuarios = JSON.parse(localStorage.getItem('usuarios'));
+            usuarios = usuarios.filter(x => x.user !== nome);
+            localStorage.setItem('usuarios', JSON.stringify(usuarios));
+            atualizarListaUsuarios();
+        }
+    </script>
+</body>
+</html>
